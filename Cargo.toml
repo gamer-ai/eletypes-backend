@@ -1,0 +1,15 @@
+[package]
+name = "eletypes-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4"
+mongodb = "3"
+dotenv = "0.15.0"
+serde = "1.0.209"
+tokio = { version = "1.40.0", features = ["macros", "rt", "rt-multi-thread"] }
+actix-cors = "0.7.0"
+chrono = { version = "0.4.38", features = ["serde"] }
+futures-util = "0.3.30"
+futures = "0.3.30"
