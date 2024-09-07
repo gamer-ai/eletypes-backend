@@ -1,7 +1,8 @@
 use actix_web::{web, App, HttpServer};
 use dotenv::dotenv;
 use eletypes_backend::config::cors::configure_cors;
-use eletypes_backend::utils::database::{configure_routes, connect_to_mongodb, get_server_address};
+use eletypes_backend::config::routes::configure_routes;
+use eletypes_backend::utils::database::{connect_to_mongodb, get_server_address};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

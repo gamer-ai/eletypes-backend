@@ -10,5 +10,7 @@ pub struct ScoreUpdateRequest {
 
 #[derive(Deserialize)]
 pub struct TimerDurationQuery {
-    pub timer_duration: u32,
+    pub timer_duration: String,
+    pub page: String,
+    pub limit: String,
 }

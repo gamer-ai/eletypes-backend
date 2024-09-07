@@ -47,8 +47,10 @@ fn extract_high_scores(
 pub async fn fetch_filtered_users(
     collection: &mongodb::Collection<Document>,
     timer_duration: &str,
+    page: &str,
+    limit: &str,
 ) -> Result<Vec<LeaderboardEntry>, mongodb::error::Error> {
-    let pipeline = create_aggregation_pipeline(timer_duration);
+    let pipeline = create_aggregation_pipeline(timer_duration, page, limit);
 
     let mut cursor = collection.aggregate(pipeline).await?;
     let mut users = Vec::new();
@@ -66,10 +68,19 @@ pub async fn fetch_filtered_users(
 }
 
 // Create aggregation pipeline for MongoDB query
-fn create_aggregation_pipeline(timer_duration: &str) -> Vec<Document> {
+fn create_aggregation_pipeline(timer_duration: &str, page: &str, limit: &str) -> Vec<Document> {
+    // Parse page and limit parameters to integers
+    let page_number: usize = page.parse().unwrap_or(1);
+    let limit_number: usize = limit.parse().unwrap_or(10);
+
+    // Calculate the number of documents to skip
+    let skip_number = (page_number - 1) * limit_number;
+
     vec![
         doc! { "$match": { format!("high_scores.{}", timer_duration): { "$exists": true } } },
         doc! { "$project": { "_id": 1, "username": 1, "completed_tests": 1, format!("high_scores.{}", timer_duration): 1 } },
+        doc! { "$skip": skip_number as i64 },
+        doc! { "$limit": limit_number as i64 },
     ]
 }
 
@@ -113,7 +124,7 @@ fn create_internal_server_error_response(username: &str) -> HttpResponse {
 }
 
 // Update user scores and handle response
-pub async fn update_user_and_handle_response(
+pub async fn save_user_scores(
     collection: &mongodb::Collection<Document>,
     username: &str,
     user: &User,
@@ -127,12 +138,16 @@ pub async fn update_user_and_handle_response(
 
 // Create a success response for updating user
 fn create_success_response(username: &str, user: &User) -> HttpResponse {
+    let high_scores_len = match &user.high_scores {
+        Some(scores) => scores.len(),
+        None => 0,
+    };
+
     HttpResponse::Ok().json(ApiResponse {
         status: "success".to_string(),
         message: format!(
             "Scores updated successfully for user '{}'. Timer duration: {} entries",
-            username,
-            user.high_scores.len()
+            username, high_scores_len
         ),
     })
 }
@@ -177,16 +192,20 @@ pub fn update_user_high_scores(user: &mut User, score_update: ScoreUpdateRequest
 
     let timer_duration_str = score_update.timer_duration.to_string();
 
-    user.high_scores
-        .entry(timer_duration_str)
-        .and_modify(|existing_entry| {
-            if new_entry.wpm > existing_entry.wpm {
-                *existing_entry = new_entry.clone();
-            }
-        })
-        .or_insert(new_entry);
+    if let Some(high_scores) = &mut user.high_scores {
+        high_scores
+            .entry(timer_duration_str)
+            .and_modify(|existing_entry| {
+                if new_entry.wpm > existing_entry.wpm {
+                    *existing_entry = new_entry.clone();
+                }
+            })
+            .or_insert(new_entry);
+    }
 
-    user.completed_tests += 1;
+    if let Some(completed_tests) = &mut user.completed_tests {
+        *completed_tests += 1;
+    }
 }
 
 // Create a new ScoreEntry
