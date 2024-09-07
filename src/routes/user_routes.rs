@@ -1,5 +1,5 @@
 use crate::constants::{COLL_NAME, DB_NAME};
-use crate::models::user_model::User;
+use crate::models::user::User;
 use actix_web::{web, HttpResponse};
 use mongodb::{bson::doc, Client, Collection};
 

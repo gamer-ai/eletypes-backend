@@ -1,20 +1,12 @@
 use crate::constants::{COLL_NAME, DB_NAME};
-use crate::models::score_model::ScoreEntry;
 use crate::repositories::user_repository::update_user_high_scores;
 use crate::repositories::user_repository::{
-    fetch_user_and_handle_response, update_user_and_handle_respond,
+    fetch_filtered_users, fetch_user_and_handle_response, update_user_and_handle_respond,
+    LeaderboardEntry, LeaderboardResponse, ScoreUpdateRequest, TimerDurationQuery,
 };
 use actix_web::{web, HttpResponse};
 use mongodb::bson;
-use mongodb::{bson::doc, Client};
-use serde::Deserialize;
-
-#[derive(Deserialize, Clone)]
-pub struct ScoreUpdateRequest {
-    pub score: ScoreEntry,
-    pub timer_duration: u32,
-    pub test_completed: u32,
-}
+use mongodb::Client;
 
 pub async fn update_user_score(
     client: web::Data<Client>,
@@ -41,7 +33,33 @@ pub async fn update_user_score(
 }
 
 pub async fn get_leaderboard_stats(
-    _client: web::Data<Client>,
-    _form: web::Json<ScoreUpdateRequest>,
-) {
+    client: web::Data<Client>,
+    query: web::Query<TimerDurationQuery>,
+) -> HttpResponse {
+    let collection = client
+        .database(DB_NAME)
+        .collection::<bson::Document>(COLL_NAME);
+
+    let timer_duration: &String = &query.timer_duration.to_string();
+
+    // Fetch users with high scores for the specified timer duration
+    let users = match fetch_filtered_users(&collection, timer_duration).await {
+        Ok(users) => users,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(LeaderboardResponse {
+                status: "error".to_string(),
+                message: "Failed to fetch leaderboard data. Please try again later.".to_string(),
+                leaderboard: vec![],
+            });
+        }
+    };
+
+    // Prepare leaderboard data
+    let leaderboard: Vec<LeaderboardEntry> = users.into_iter().collect();
+
+    HttpResponse::Ok().json(LeaderboardResponse {
+        status: "success".to_string(),
+        message: "Leaderboard stats retrieved successfully.".to_string(),
+        leaderboard,
+    })
 }

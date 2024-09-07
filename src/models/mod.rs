@@ -1,2 +1,4 @@
-pub mod score_model;
-pub mod user_model;
+pub mod api_response;
+pub mod leaderboard;
+pub mod score_request;
+pub mod user;
