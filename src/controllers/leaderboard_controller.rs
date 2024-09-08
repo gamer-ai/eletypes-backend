@@ -1,9 +1,11 @@
 use crate::constants::{COLL_NAME, DB_NAME};
-use crate::repositories::user_repository::{
-    fetch_filtered_users, fetch_user_and_handle_response, save_user_scores,
-    update_user_high_scores, LeaderboardEntry, LeaderboardResponse, ScoreUpdateRequest,
-    TimerDurationQuery,
+use crate::models::leaderboard::{LeaderboardEntry, LeaderboardResponse};
+use crate::models::score_request::{ScoreUpdateRequest, TimerDurationQuery};
+use crate::services::leaderboard_service::fetch_filtered_users;
+use crate::services::user_service::{
+    fetch_user_and_handle_response, save_user_scores, update_user_high_scores,
 };
+
 use actix_web::{web, HttpResponse};
 use mongodb::bson;
 use mongodb::Client;
@@ -41,7 +43,6 @@ pub async fn get_leaderboard_stats(
     let page: &str = &query.page;
     let limit: &str = &query.limit;
 
-    // Fetch users with high scores for the specified timer duration
     let users = match fetch_filtered_users(&collection, timer_duration, page, limit).await {
         Ok(users) => users,
         Err(_) => {
@@ -53,7 +54,6 @@ pub async fn get_leaderboard_stats(
         }
     };
 
-    // Prepare leaderboard data
     let leaderboard: Vec<LeaderboardEntry> = users.into_iter().collect();
 
     HttpResponse::Ok().json(LeaderboardResponse {

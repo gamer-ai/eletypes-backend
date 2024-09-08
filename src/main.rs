@@ -1,8 +1,10 @@
 use actix_web::{web, App, HttpServer};
 use dotenv::dotenv;
 use eletypes_backend::config::cors::configure_cors;
-use eletypes_backend::config::routes::configure_routes;
-use eletypes_backend::utils::database::{connect_to_mongodb, get_server_address};
+use eletypes_backend::config::database::{connect_to_mongodb, get_server_address};
+use eletypes_backend::routes::{
+    leaderboard_routes::configure_leaderboard_routes, user_routes::configure_user_routes,
+};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -17,7 +19,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(configure_cors())
             .app_data(web::Data::new(mongodb_client.clone()))
-            .configure(configure_routes)
+            .configure(configure_leaderboard_routes)
+            .configure(configure_user_routes)
     })
     .bind(address)?
     .run()
