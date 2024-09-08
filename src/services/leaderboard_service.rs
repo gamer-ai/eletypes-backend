@@ -5,7 +5,7 @@ use crate::models::user::ScoreEntry;
 use futures_util::TryStreamExt;
 use mongodb::bson::Document;
 use mongodb::bson::{doc, from_bson, Bson};
-use serde_json::json;
+// use serde_json::json;
 use std::collections::HashMap;
 
 pub fn extract_leaderboard_entry(
@@ -55,7 +55,7 @@ pub async fn fetch_filtered_users(
         }
     }
 
-    log_leaderboard_stats(&users);
+    // log_leaderboard_stats(&users);
 
     Ok(users)
 }
@@ -66,16 +66,26 @@ fn create_aggregation_pipeline(timer_duration: &str, page: &str, limit: &str) ->
     let skip_number = (page_number - 1) * limit_number;
 
     vec![
+        // Match documents where the field for the given timer duration exists
         doc! { "$match": { format!("high_scores.{}", timer_duration): { "$exists": true } } },
-        doc! { "$project": { "_id": 1, "username": 1, "completed_tests": 1, format!("high_scores.{}", timer_duration): 1 } },
+        // Project the necessary fields, including the WPM for the given timer duration
+        doc! { "$project": {
+            "_id": 1,
+            "username": 1,
+            "completed_tests": 1,
+            format!("high_scores.{}", timer_duration): 1
+        }},
+        // Skip documents based on the page number and limit
         doc! { "$skip": skip_number as i64 },
         doc! { "$limit": limit_number as i64 },
+        // Sort by the best WPM in descending order
+        doc! { "$sort": { format!("high_scores.{}.wpm", timer_duration): -1 } },
     ]
 }
 
-fn log_leaderboard_stats(users: &[LeaderboardEntry]) {
-    println!(
-        "Leaderboard Stats: {}",
-        serde_json::to_string_pretty(&json!(users)).unwrap()
-    );
-}
+// fn log_leaderboard_stats(users: &[LeaderboardEntry]) {
+//     println!(
+//         "Leaderboard Stats: {}",
+//         serde_json::to_string_pretty(&json!(users)).unwrap()
+//     );
+// }
