@@ -1,6 +1,7 @@
 use crate::constants::{COLL_NAME, DB_NAME};
-use crate::models::leaderboard::{LeaderboardEntry, LeaderboardResponse};
-use crate::models::score_request::{ScoreUpdateRequest, TimerDurationQuery};
+use crate::models::leaderboard::{
+    LeaderboardEntry, LeaderboardResponse, ScoreUpdateRequest, TimerDurationQuery,
+};
 use crate::services::leaderboard_service::fetch_filtered_users;
 use crate::services::user_service::{
     fetch_user_and_handle_response, save_user_scores, update_user_high_scores,

@@ -22,3 +22,17 @@ pub struct LeaderboardResponse {
 pub struct GetLeaderboardStatsRequest {
     pub timer_duration: u32,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct ScoreUpdateRequest {
+    pub score: ScoreEntry,
+    pub timer_duration: u32,
+    pub test_completed: u32,
+}
+
+#[derive(Deserialize)]
+pub struct TimerDurationQuery {
+    pub timer_duration: String,
+    pub page: String,
+    pub limit: String,
+}

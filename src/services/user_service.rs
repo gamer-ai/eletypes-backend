@@ -1,5 +1,5 @@
 use crate::models::api_response::ApiResponse;
-use crate::models::score_request::ScoreUpdateRequest;
+use crate::models::leaderboard::ScoreUpdateRequest;
 use crate::models::user::{ScoreEntry, User};
 use actix_web::HttpResponse;
 use chrono::Utc;
