@@ -77,7 +77,14 @@ pub fn default_user() -> User {
     }
 
     let mut languages = HashMap::new();
-    languages.insert("english".to_string(), LanguageScores { difficulties });
+    for language in ["english", "chinese"].iter() {
+        languages.insert(
+            language.to_string(),
+            LanguageScores {
+                difficulties: difficulties.clone(),
+            },
+        );
+    }
 
     User {
         username: "".to_string(),
