@@ -1,10 +1,11 @@
 use crate::models::api_response::ApiResponse;
 use crate::models::leaderboard::ScoreUpdateRequest;
-use crate::models::user::{ScoreEntry, User};
+use crate::models::user::{DifficultyScores, HighScores, LanguageScores, Score, User};
 use actix_web::HttpResponse;
 use chrono::Utc;
 use mongodb::bson::{doc, from_bson, to_bson, Bson, Document};
 use mongodb::Collection;
+use std::collections::HashMap;
 
 pub async fn fetch_user_and_handle_response(
     collection: &Collection<Document>,
@@ -48,7 +49,7 @@ pub async fn save_user_scores(
 
 fn create_success_response(username: &str, user: &User) -> HttpResponse {
     let high_scores_len = match &user.high_scores {
-        Some(scores) => scores.len(),
+        Some(scores) => scores.languages.len(),
         None => 0,
     };
 
@@ -81,17 +82,65 @@ fn create_internal_server_error_update_response(username: &str) -> HttpResponse 
 pub fn update_user_high_scores(user: &mut User, score_update: ScoreUpdateRequest) {
     let new_entry = create_score_entry(&score_update);
 
-    let timer_duration_str = score_update.timer_duration.to_string();
+    let timer_duration_str = score_update.duration.clone(); // Use duration as String
+    let language = score_update.language.clone();
+    let difficulty = score_update.difficulty.clone();
 
     if let Some(high_scores) = &mut user.high_scores {
-        high_scores
-            .entry(timer_duration_str)
-            .and_modify(|existing_entry| {
-                if new_entry.wpm > existing_entry.wpm {
-                    *existing_entry = new_entry.clone();
-                }
-            })
-            .or_insert(new_entry);
+        let language_scores = high_scores
+            .languages
+            .entry(language.clone())
+            .or_insert_with(|| LanguageScores {
+                difficulties: HashMap::new(),
+            });
+
+        let difficulty_scores = language_scores
+            .difficulties
+            .entry(difficulty.clone())
+            .or_insert_with(|| DifficultyScores {
+                scores: HashMap::new(),
+            });
+
+        let existing_score = difficulty_scores
+            .scores
+            .entry(timer_duration_str.clone())
+            .or_insert_with(|| Score {
+                wpm: 0,
+                raw_wpm: 0,
+                accuracy: 0.0,
+                date: Utc::now(),
+            });
+
+        if new_entry.wpm > existing_score.wpm {
+            *existing_score = new_entry;
+        }
+    } else {
+        // Initialize high_scores if it does not exist
+        user.high_scores = Some(HighScores {
+            languages: {
+                let mut map = HashMap::new();
+                map.insert(
+                    language.clone(),
+                    LanguageScores {
+                        difficulties: {
+                            let mut diff_map = HashMap::new();
+                            diff_map.insert(
+                                difficulty.clone(),
+                                DifficultyScores {
+                                    scores: {
+                                        let mut score_map = HashMap::new();
+                                        score_map.insert(timer_duration_str.clone(), new_entry);
+                                        score_map
+                                    },
+                                },
+                            );
+                            diff_map
+                        },
+                    },
+                );
+                map
+            },
+        });
     }
 
     if let Some(completed_tests) = &mut user.completed_tests {
@@ -99,12 +148,12 @@ pub fn update_user_high_scores(user: &mut User, score_update: ScoreUpdateRequest
     }
 }
 
-fn create_score_entry(score_update: &ScoreUpdateRequest) -> ScoreEntry {
-    ScoreEntry {
+fn create_score_entry(score_update: &ScoreUpdateRequest) -> Score {
+    Score {
         wpm: score_update.score.wpm,
         raw_wpm: score_update.score.raw_wpm,
         accuracy: score_update.score.accuracy,
-        date: Utc::now(),
+        date: score_update.score.date,
     }
 }
 

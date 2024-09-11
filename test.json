@@ -1,0 +1,46 @@
+{
+  "high_scores": {
+    "english": {
+      "hard": {
+        "15": {
+          "wpm": 90,
+          "raw_wpm": 90,
+          "accuracy": 90.5,
+          "date": "current date"
+        },
+        "30": {
+          "wpm": 90,
+          "raw_wpm": 90,
+          "accuracy": 90.5,
+          "date": "current date"
+        },
+        "60": {
+          "wpm": 90,
+          "raw_wpm": 90,
+          "accuracy": 90.5,
+          "date": "current date"
+        },
+        "90": {
+          "wpm": 90,
+          "raw_wpm": 90,
+          "accuracy": 90.5,
+          "date": "current date"
+        }
+      }
+    }
+  }
+}
+
+{
+  "score": {
+    "english": {
+      "hard": {
+        "15": {
+          "wpm": 90,
+          "raw_wpm": 90,
+          "accuracy": 90.5,
+          "date": "current date"
+        }
+    }
+  }
+}

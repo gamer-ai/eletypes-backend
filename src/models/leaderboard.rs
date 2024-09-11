@@ -1,6 +1,5 @@
-use crate::models::user::ScoreEntry;
+use crate::models::user::{HighScores, Score};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 pub struct LeaderboardEntry {
@@ -8,7 +7,7 @@ pub struct LeaderboardEntry {
     pub _id: String,
     pub username: String,
     pub completed_tests: u32,
-    pub high_scores: HashMap<String, ScoreEntry>,
+    pub high_scores: HighScores,
 }
 
 #[derive(Serialize)]
@@ -23,16 +22,19 @@ pub struct GetLeaderboardStatsRequest {
     pub timer_duration: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct ScoreUpdateRequest {
-    pub score: ScoreEntry,
-    pub timer_duration: u32,
-    pub test_completed: u32,
+    pub duration: String,
+    pub language: String,
+    pub difficulty: String,
+    pub score: Score,
 }
 
 #[derive(Deserialize)]
-pub struct TimerDurationQuery {
+pub struct GetLeaderboardStatsQueries {
     pub timer_duration: String,
     pub page: String,
     pub limit: String,
+    pub difficulty: String,
+    pub language: String,
 }
