@@ -6,7 +6,7 @@ use crate::services::user_service::{
 };
 use crate::structs::api_response::{error_response, success_response};
 use crate::structs::leaderboard::ScoreUpdateRequest;
-use crate::structs::login::LoginRequest;
+use crate::structs::sign_up::SignUpRequest;
 
 use actix_web::{web, HttpResponse};
 use mongodb::{
@@ -37,7 +37,7 @@ pub async fn update_user_scores(
     save_user_scores(&collection, &username_str, &user).await
 }
 
-pub async fn sign_up(client: web::Data<Client>, form: web::Json<LoginRequest>) -> HttpResponse {
+pub async fn sign_up(client: web::Data<Client>, form: web::Json<SignUpRequest>) -> HttpResponse {
     let collection = get_collection(&client);
     let request_data = form.into_inner();
 
