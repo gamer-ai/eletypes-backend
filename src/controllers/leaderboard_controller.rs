@@ -1,8 +1,8 @@
 use crate::constants::{COLL_NAME, DB_NAME};
-use crate::models::leaderboard::{
+use crate::services::leaderboard_service::fetch_filtered_users;
+use crate::structs::leaderboard::{
     GetLeaderboardStatsQueries, LeaderboardEntry, LeaderboardResponse,
 };
-use crate::services::leaderboard_service::fetch_filtered_users;
 
 use actix_web::{web, HttpResponse};
 use mongodb::bson;

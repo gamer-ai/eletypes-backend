@@ -14,3 +14,4 @@ chrono = { version = "0.4.38", features = ["serde"] }
 futures-util = "0.3.30"
 futures = "0.3.30"
 serde_json = "1.0.128"
+reqwest = { version = "0.12.7", features = ["json"] }

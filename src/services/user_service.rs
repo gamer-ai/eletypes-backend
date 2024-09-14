@@ -1,11 +1,56 @@
-use crate::models::api_response::ApiResponse;
-use crate::models::leaderboard::ScoreUpdateRequest;
-use crate::models::user::{DifficultyScores, HighScores, LanguageScores, Score, User};
+use crate::models::user::{
+    default_user, DifficultyScores, HighScores, LanguageScores, Score, User,
+};
+use crate::structs::api_response::ApiResponse;
+use crate::structs::leaderboard::ScoreUpdateRequest;
+use crate::structs::recaptcha_response::RecaptchaResponse;
 use actix_web::HttpResponse;
 use chrono::Utc;
 use mongodb::bson::{doc, from_bson, to_bson, Bson, Document};
+use mongodb::error::Error;
 use mongodb::Collection;
+use reqwest::Error as ReqwestError;
 use std::collections::HashMap;
+
+pub fn create_user(username: String, password: String) -> User {
+    let mut user = default_user();
+    user.username = username;
+    user.password = password;
+    user
+}
+
+pub async fn insert_user(collection: &Collection<User>, user: User) -> Result<(), String> {
+    collection
+        .insert_one(user)
+        .await
+        .map_err(|_| "Error adding user".to_string())?;
+    Ok(())
+}
+
+pub async fn verify_recaptcha(token: &str) -> Result<RecaptchaResponse, ReqwestError> {
+    let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
+
+    let url = format!(
+        "https://www.google.com/recaptcha/api/siteverify?secret={}&response={}",
+        secret_key, token
+    );
+
+    let client = reqwest::Client::new();
+    let response = client.post(&url).send().await?;
+
+    let recaptcha_response = response.json::<RecaptchaResponse>().await?;
+
+    Ok(recaptcha_response)
+}
+
+pub async fn is_user_exists(collection: &Collection<User>, username: &str) -> Result<bool, Error> {
+    let filter = doc! { "username": username };
+    match collection.find_one(filter).await {
+        Ok(Some(_)) => Ok(true),
+        Ok(None) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
 
 pub async fn fetch_user_and_handle_response(
     collection: &Collection<Document>,

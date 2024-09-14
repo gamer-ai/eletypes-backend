@@ -1,7 +1,7 @@
-pub use crate::models::leaderboard::{
+use crate::models::user::HighScores;
+pub use crate::structs::leaderboard::{
     GetLeaderboardStatsRequest, LeaderboardEntry, LeaderboardResponse,
 };
-use crate::models::user::HighScores;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, from_bson, Bson, Document};
 use std::collections::HashMap;

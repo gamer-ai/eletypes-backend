@@ -1,10 +1,12 @@
 use crate::constants::{COLL_NAME, DB_NAME};
-use crate::models::api_response::{error_response, success_response};
-use crate::models::leaderboard::ScoreUpdateRequest;
-use crate::models::user::{default_user, User};
+use crate::models::user::User;
 use crate::services::user_service::{
-    fetch_user_and_handle_response, save_user_scores, update_user_high_scores,
+    create_user, fetch_user_and_handle_response, insert_user, is_user_exists, save_user_scores,
+    update_user_high_scores, verify_recaptcha,
 };
+use crate::structs::api_response::{error_response, success_response};
+use crate::structs::leaderboard::ScoreUpdateRequest;
+use crate::structs::login::LoginRequest;
 
 use actix_web::{web, HttpResponse};
 use mongodb::{
@@ -14,14 +16,6 @@ use mongodb::{
 
 fn get_collection(client: &Client) -> Collection<User> {
     client.database(DB_NAME).collection(COLL_NAME)
-}
-
-fn handle_error<T>(result: Result<T, mongodb::error::Error>, error_msg: &str) -> HttpResponse {
-    match result {
-        Ok(_) => HttpResponse::Ok().json(success_response("User added successfully.")),
-        Err(err) => HttpResponse::InternalServerError()
-            .json(error_response(&format!("{}: {}", error_msg, err))),
-    }
 }
 
 pub async fn update_user_scores(
@@ -43,24 +37,64 @@ pub async fn update_user_scores(
     save_user_scores(&collection, &username_str, &user).await
 }
 
-pub async fn add_user(client: web::Data<Client>, form: web::Json<User>) -> HttpResponse {
+pub async fn sign_up(client: web::Data<Client>, form: web::Json<LoginRequest>) -> HttpResponse {
     let collection = get_collection(&client);
-    let mut user = form.into_inner();
+    let request_data = form.into_inner();
 
-    if user.username.trim().is_empty() {
+    let username = request_data.username.trim();
+    let token = request_data.token.trim();
+    let password = request_data.password.trim();
+    let confirmation_password = request_data.confirmation_password.trim();
+
+    if username.is_empty() {
         return HttpResponse::BadRequest().json(error_response("Username cannot be empty."));
     }
-    if user.password.trim().is_empty() {
+    if token.is_empty() {
+        return HttpResponse::BadRequest().json(error_response("Token cannot be empty."));
+    }
+    if password.is_empty() {
         return HttpResponse::BadRequest().json(error_response("Password cannot be empty."));
     }
-
-    if user.high_scores.is_none() {
-        user.high_scores = default_user().high_scores;
+    if confirmation_password.is_empty() {
+        return HttpResponse::BadRequest()
+            .json(error_response("Confirmation Password cannot be empty."));
+    }
+    if confirmation_password != password {
+        return HttpResponse::BadRequest()
+            .json(error_response("Confirmation Password is incorrect."));
     }
 
-    let result = collection.insert_one(user).await;
+    match verify_recaptcha(token).await {
+        Ok(response) => {
+            if response.success {
+                println!("reCAPTCHA verification successful");
+            } else {
+                return HttpResponse::BadRequest().json(error_response(&format!(
+                    "reCAPTCHA verification failed: {:?}",
+                    response.error_codes
+                )));
+            }
+        }
+        Err(err) => {
+            eprintln!("Error verifying reCAPTCHA: {:?}", err);
+            return HttpResponse::InternalServerError()
+                .json(error_response("Error verifying reCAPTCHA."));
+        }
+    }
 
-    handle_error(result.map(|_| ()), "Error adding user")
+    match is_user_exists(&collection, username).await {
+        Ok(true) => HttpResponse::BadRequest().json(error_response("Username already taken.")),
+        Ok(false) => {
+            let user = create_user(username.to_string(), password.to_string());
+
+            match insert_user(&collection, user).await {
+                Ok(_) => HttpResponse::Ok().json(success_response("User successfully registered.")),
+                Err(err) => HttpResponse::InternalServerError().json(error_response(&err)),
+            }
+        }
+        Err(_) => HttpResponse::InternalServerError()
+            .json(error_response("Error checking username availability.")),
+    }
 }
 
 pub async fn get_user(client: web::Data<Client>, username: web::Path<String>) -> HttpResponse {
