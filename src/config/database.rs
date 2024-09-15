@@ -16,5 +16,5 @@ pub async fn connect_to_mongodb() -> Client {
 
 pub fn get_server_address() -> String {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    format!("localhost:{}", port)
+    format!("0.0.0.0:{}", port)
 }

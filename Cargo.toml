@@ -1,10 +1,9 @@
 [package]
 name = "eletypes-backend"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
 
 [dependencies]
-actix-web = "4"
 mongodb = "3"
 dotenv = "0.15.0"
 serde = "1.0.209"
@@ -15,3 +14,8 @@ futures-util = "0.3.30"
 futures = "0.3.30"
 serde_json = "1.0.128"
 reqwest = { version = "0.12.7", features = ["json"] }
+actix-web = "4.5.1"
+
+[[bin]]
+name = "eletypes-backend"
+path = "src/main.rs"
