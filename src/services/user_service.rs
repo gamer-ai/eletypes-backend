@@ -30,13 +30,12 @@ pub async fn insert_user(collection: &Collection<User>, user: User) -> Result<()
 pub async fn verify_recaptcha(token: &str) -> Result<RecaptchaResponse, ReqwestError> {
     let secret_key = std::env::var("SECRET_KEY").expect("SECRET_KEY must be set");
 
-    let url = format!(
-        "https://www.google.com/recaptcha/api/siteverify?secret={}&response={}",
-        secret_key, token
-    );
-
     let client = reqwest::Client::new();
-    let response = client.post(&url).send().await?;
+    let response = client
+        .post("https://www.google.com/recaptcha/api/siteverify")
+        .form(&[("secret", secret_key), ("response", token.to_string())])
+        .send()
+        .await?;
 
     let recaptcha_response = response.json::<RecaptchaResponse>().await?;
 
