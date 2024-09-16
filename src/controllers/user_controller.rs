@@ -2,7 +2,7 @@ use crate::constants::{COLL_NAME, DB_NAME};
 use crate::models::user::User;
 use crate::services::user_service::{
     create_user, fetch_user_and_handle_response, insert_user, is_user_exists, save_user_scores,
-    update_user_high_scores, verify_recaptcha,
+    update_user_high_scores, validate_credentials, verify_recaptcha,
 };
 use crate::structs::api_response::{error_response, success_response};
 use crate::structs::leaderboard::ScoreUpdateRequest;
@@ -46,22 +46,13 @@ pub async fn sign_up(client: web::Data<Client>, form: web::Json<SignUpRequest>) 
     let password = request_data.password.trim();
     let confirmation_password = request_data.confirmation_password.trim();
 
-    if username.is_empty() {
-        return HttpResponse::BadRequest().json(error_response("Username cannot be empty."));
-    }
-    if token.is_empty() {
-        return HttpResponse::BadRequest().json(error_response("Token cannot be empty."));
-    }
-    if password.is_empty() {
-        return HttpResponse::BadRequest().json(error_response("Password cannot be empty."));
-    }
-    if confirmation_password.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(error_response("Confirmation Password cannot be empty."));
-    }
-    if confirmation_password != password {
-        return HttpResponse::BadRequest()
-            .json(error_response("Confirmation Password is incorrect."));
+    if let Some(response) = validate_credentials(
+        &username,
+        &token,
+        &password,
+        confirmation_password.as_deref(),
+    ) {
+        return response;
     }
 
     match verify_recaptcha(token).await {
@@ -97,10 +88,16 @@ pub async fn sign_up(client: web::Data<Client>, form: web::Json<SignUpRequest>) 
     }
 }
 
-pub async fn get_user(client: web::Data<Client>, username: web::Path<String>) -> HttpResponse {
+pub async fn get_user_detail(
+    client: web::Data<Client>,
+    username: web::Path<String>,
+) -> HttpResponse {
     let collection = get_collection(&client);
     let username = username.into_inner();
-    match collection.find_one(doc! { "username": &username }).await {
+
+    let filter = doc! { "username": &username };
+
+    match collection.find_one(filter).await {
         Ok(Some(user)) => HttpResponse::Ok().json(user),
         Ok(None) => HttpResponse::NotFound().json(error_response(&format!(
             "No user found with username '{}'",

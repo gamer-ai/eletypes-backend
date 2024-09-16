@@ -80,10 +80,6 @@ pub fn create_aggregation_pipeline(
     let limit_number: usize = limit.parse().unwrap_or(10);
     let skip_number = (page_number - 1) * limit_number;
 
-    println!("Language: {language}");
-    println!("timer_duration: {timer_duration}");
-    println!("Difficulty: {difficulty}");
-
     vec![
         doc! { "$match": {
             format!("high_scores.languages.{}.difficulties.{}.scores.{}", language, difficulty, timer_duration): { "$exists": true }

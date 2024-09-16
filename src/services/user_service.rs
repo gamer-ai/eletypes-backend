@@ -1,6 +1,7 @@
 use crate::models::user::{
     default_user, DifficultyScores, HighScores, LanguageScores, Score, User,
 };
+use crate::structs::api_response::error_response;
 use crate::structs::api_response::ApiResponse;
 use crate::structs::leaderboard::ScoreUpdateRequest;
 use crate::structs::recaptcha_response::RecaptchaResponse;
@@ -11,6 +12,38 @@ use mongodb::error::Error;
 use mongodb::Collection;
 use reqwest::Error as ReqwestError;
 use std::collections::HashMap;
+
+pub fn validate_credentials(
+    username: &str,
+    token: &str,
+    password: &str,
+    confirmation_password: Option<&str>,
+) -> Option<HttpResponse> {
+    if username.is_empty() {
+        return Some(HttpResponse::BadRequest().json(error_response("Username cannot be empty.")));
+    }
+    if token.is_empty() {
+        return Some(HttpResponse::BadRequest().json(error_response("Token cannot be empty.")));
+    }
+    if password.is_empty() {
+        return Some(HttpResponse::BadRequest().json(error_response("Password cannot be empty.")));
+    }
+    if let Some(confirmation_password) = confirmation_password {
+        if confirmation_password.is_empty() {
+            return Some(
+                HttpResponse::BadRequest()
+                    .json(error_response("Confirmation Password cannot be empty.")),
+            );
+        }
+        if confirmation_password != password {
+            return Some(
+                HttpResponse::BadRequest()
+                    .json(error_response("Confirmation Password is incorrect.")),
+            );
+        }
+    }
+    None
+}
 
 pub fn create_user(username: String, password: String) -> User {
     let mut user = default_user();

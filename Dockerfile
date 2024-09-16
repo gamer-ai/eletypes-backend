@@ -19,7 +19,6 @@ RUN rm src/*.rs
 COPY . .
 
 # build for release
-# RUN rm ./target/release/deps/eletypes-backend*
 RUN cargo build --release
 
 # our final base

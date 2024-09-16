@@ -15,6 +15,8 @@ futures = "0.3.30"
 serde_json = "1.0.128"
 reqwest = { version = "0.12.7", features = ["json"] }
 actix-web = "4.5.1"
+jsonwebtoken = "9.3.0"
+cookie = "0.18.1"
 
 [[bin]]
 name = "eletypes-backend"
