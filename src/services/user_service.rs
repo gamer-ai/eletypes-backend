@@ -1,17 +1,92 @@
 use crate::models::user::{
     default_user, DifficultyScores, HighScores, LanguageScores, Score, User,
 };
-use crate::structs::api_response::error_response;
 use crate::structs::api_response::ApiResponse;
+use crate::structs::api_response::{error_response, success_response};
+use crate::structs::claims::Claims;
 use crate::structs::leaderboard::ScoreUpdateRequest;
 use crate::structs::recaptcha_response::RecaptchaResponse;
-use actix_web::HttpResponse;
+use actix_web::cookie::time::Duration;
+use actix_web::{cookie::Cookie, HttpResponse};
 use chrono::Utc;
-use mongodb::bson::{doc, from_bson, to_bson, Bson, Document};
+use jsonwebtoken::{encode, EncodingKey, Header};
+use mongodb::bson::{doc, from_bson, to_bson, to_document, Bson, Document};
 use mongodb::error::Error;
 use mongodb::Collection;
 use reqwest::Error as ReqwestError;
 use std::collections::HashMap;
+use std::env;
+
+pub async fn process_user_registration(
+    collection: &Collection<Document>,
+    username: &str,
+    password: &str,
+) -> HttpResponse {
+    match is_user_exists(collection, username).await {
+        Ok(true) => HttpResponse::BadRequest().json(error_response("Username already taken.")),
+        Ok(false) => {
+            let user = create_user(username.to_string(), password.to_string());
+            match insert_user(collection, user).await {
+                Ok(_) => HttpResponse::Ok().json(success_response("User successfully registered.")),
+                Err(err) => HttpResponse::InternalServerError().json(error_response(&err)),
+            }
+        }
+        Err(_) => HttpResponse::InternalServerError()
+            .json(error_response("Error checking username availability.")),
+    }
+}
+
+pub async fn verify_recaptcha_and_check(token: &str) -> Result<(), HttpResponse> {
+    match verify_recaptcha(token).await {
+        Ok(response) if response.success => Ok(()),
+        Ok(_) => Err(HttpResponse::BadRequest().json(error_response(
+            "reCAPTCHA verification failed. It seems you are not a human.",
+        ))),
+        Err(err) => {
+            eprintln!("Error verifying reCAPTCHA: {:?}", err);
+            Err(HttpResponse::InternalServerError().json(error_response(
+                "An error occurred while verifying reCAPTCHA. Please try again later.",
+            )))
+        }
+    }
+}
+
+pub fn create_http_only_cookie(token: String) -> Cookie<'static> {
+    Cookie::build("user_jwt_token", token)
+        .http_only(true)
+        .secure(true)
+        .path("/")
+        .max_age(Duration::new(3600, 0))
+        .finish()
+}
+
+pub async fn authenticate_user(
+    collection: &Collection<Document>,
+    username: &str,
+    password: &str,
+) -> Result<bool, Error> {
+    if let Some(user) = fetch_user_by_username(collection, username).await? {
+        Ok(user.password == password)
+    } else {
+        Ok(false)
+    }
+}
+
+pub fn generate_jwt(username: &str) -> Result<String, jsonwebtoken::errors::Error> {
+    let secret_key = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+    let expiration_time = (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp() as usize;
+    let claims = Claims {
+        sub: username.to_string(),
+        exp: expiration_time,
+    };
+
+    let encoding_key = EncodingKey::from_secret(secret_key.as_bytes());
+
+    let token = encode(&Header::default(), &claims, &encoding_key)?;
+
+    Ok(token)
+}
 
 pub fn validate_credentials(
     username: &str,
@@ -52,12 +127,16 @@ pub fn create_user(username: String, password: String) -> User {
     user
 }
 
-pub async fn insert_user(collection: &Collection<User>, user: User) -> Result<(), String> {
-    collection
-        .insert_one(user)
-        .await
-        .map_err(|_| "Error adding user".to_string())?;
-    Ok(())
+pub async fn insert_user(collection: &Collection<Document>, user: User) -> Result<(), String> {
+    let user_doc = match to_document(&user) {
+        Ok(doc) => doc,
+        Err(err) => return Err(format!("Error converting user to BSON: {}", err)),
+    };
+
+    match collection.insert_one(user_doc).await {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Error inserting user: {}", err)),
+    }
 }
 
 pub async fn verify_recaptcha(token: &str) -> Result<RecaptchaResponse, ReqwestError> {
@@ -75,7 +154,10 @@ pub async fn verify_recaptcha(token: &str) -> Result<RecaptchaResponse, ReqwestE
     Ok(recaptcha_response)
 }
 
-pub async fn is_user_exists(collection: &Collection<User>, username: &str) -> Result<bool, Error> {
+pub async fn is_user_exists(
+    collection: &Collection<Document>,
+    username: &str,
+) -> Result<bool, Error> {
     let filter = doc! { "username": username };
     match collection.find_one(filter).await {
         Ok(Some(_)) => Ok(true),
@@ -156,81 +238,79 @@ fn create_internal_server_error_update_response(username: &str) -> HttpResponse 
     })
 }
 
-pub fn update_user_high_scores(user: &mut User, score_update: ScoreUpdateRequest) {
-    let new_entry = create_score_entry(&score_update);
-
-    let timer_duration_str = score_update.duration.clone(); // Use duration as String
-    let language = score_update.language.clone();
-    let difficulty = score_update.difficulty.clone();
-
-    if let Some(high_scores) = &mut user.high_scores {
-        let language_scores = high_scores
-            .languages
-            .entry(language.clone())
-            .or_insert_with(|| LanguageScores {
-                difficulties: HashMap::new(),
-            });
-
-        let difficulty_scores = language_scores
-            .difficulties
-            .entry(difficulty.clone())
-            .or_insert_with(|| DifficultyScores {
-                scores: HashMap::new(),
-            });
-
-        let existing_score = difficulty_scores
-            .scores
-            .entry(timer_duration_str.clone())
-            .or_insert_with(|| Score {
-                wpm: 0,
-                raw_wpm: 0,
-                accuracy: 0.0,
-                date: Utc::now(),
-            });
-
-        if new_entry.wpm > existing_score.wpm {
-            *existing_score = new_entry;
-        }
-    } else {
-        // Initialize high_scores if it does not exist
-        user.high_scores = Some(HighScores {
-            languages: {
-                let mut map = HashMap::new();
-                map.insert(
-                    language.clone(),
-                    LanguageScores {
-                        difficulties: {
-                            let mut diff_map = HashMap::new();
-                            diff_map.insert(
-                                difficulty.clone(),
-                                DifficultyScores {
-                                    scores: {
-                                        let mut score_map = HashMap::new();
-                                        score_map.insert(timer_duration_str.clone(), new_entry);
-                                        score_map
-                                    },
-                                },
-                            );
-                            diff_map
-                        },
-                    },
-                );
-                map
-            },
-        });
-    }
-
-    if let Some(completed_tests) = &mut user.completed_tests {
-        *completed_tests += 1;
-    }
-}
-
 fn create_score_entry(score_update: &ScoreUpdateRequest) -> Score {
     Score {
         wpm: score_update.score.wpm,
         raw_wpm: score_update.score.raw_wpm,
         accuracy: score_update.score.accuracy,
         date: score_update.score.date,
+    }
+}
+
+pub fn update_user_high_scores(user: &mut User, score_update: ScoreUpdateRequest) {
+    let new_entry = create_score_entry(&score_update);
+
+    // Extract relevant details from score_update
+    let timer_duration_str = score_update.duration;
+    let language = score_update.language;
+    let difficulty = score_update.difficulty;
+
+    user.high_scores = Some(update_high_scores(
+        user.high_scores.take(),
+        language,
+        difficulty,
+        timer_duration_str,
+        new_entry,
+    ));
+    increment_completed_tests(&mut user.completed_tests);
+}
+
+fn update_high_scores(
+    existing_high_scores: Option<HighScores>,
+    language: String,
+    difficulty: String,
+    timer_duration_str: String,
+    new_entry: Score,
+) -> HighScores {
+    let mut high_scores = existing_high_scores.unwrap_or_else(|| HighScores {
+        languages: HashMap::new(),
+    });
+
+    let language_scores = high_scores
+        .languages
+        .entry(language.clone())
+        .or_insert_with(|| LanguageScores {
+            difficulties: HashMap::new(),
+        });
+
+    let difficulty_scores = language_scores
+        .difficulties
+        .entry(difficulty.clone())
+        .or_insert_with(|| DifficultyScores {
+            scores: HashMap::new(),
+        });
+
+    let existing_score = difficulty_scores
+        .scores
+        .entry(timer_duration_str.clone())
+        .or_insert_with(|| Score {
+            wpm: 0,
+            raw_wpm: 0,
+            accuracy: 0.0,
+            date: Utc::now(),
+        });
+
+    // Update score if new entry is better
+    if new_entry.wpm > existing_score.wpm {
+        *existing_score = new_entry;
+    }
+
+    high_scores
+}
+
+fn increment_completed_tests(completed_tests: &mut Option<u32>) {
+    if let Some(tests) = completed_tests {
+        *tests += 1;
     }
 }
 

@@ -2,9 +2,27 @@ use crate::models::user::HighScores;
 pub use crate::structs::leaderboard::{
     GetLeaderboardStatsRequest, LeaderboardEntry, LeaderboardResponse,
 };
+use actix_web::HttpResponse;
 use futures_util::TryStreamExt;
 use mongodb::bson::{doc, from_bson, Bson, Document};
+use mongodb::Collection;
 use std::collections::HashMap;
+
+pub async fn get_total_document_count(
+    collection: &Collection<Document>,
+) -> Result<i64, HttpResponse> {
+    match collection.count_documents(doc! {}).await {
+        Ok(count) => Ok(count as i64),
+        Err(_) => Err(
+            HttpResponse::InternalServerError().json(LeaderboardResponse {
+                status: "error".to_string(),
+                message: "Failed to fetch the total document count.".to_string(),
+                leaderboard: vec![],
+                total_count: 0,
+            }),
+        ),
+    }
+}
 
 pub fn extract_leaderboard_entry(
     doc: &Document,

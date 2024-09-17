@@ -15,6 +15,7 @@ pub struct LeaderboardResponse {
     pub status: String,
     pub message: String,
     pub leaderboard: Vec<LeaderboardEntry>,
+    pub total_count: i64,
 }
 
 #[derive(Serialize)]
