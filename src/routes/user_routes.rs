@@ -11,9 +11,6 @@ pub fn configure_user_routes(cfg: &mut web::ServiceConfig) {
             "/get_user_detail/{username}",
             web::get().to(get_user_detail),
         )
-        .route(
-            "/update_user_scores/{username}",
-            web::post().to(update_user_scores),
-        )
+        .route("/update_user_scores", web::post().to(update_user_scores))
         .service(web::resource("/logout").route(web::delete().to(logout)));
 }

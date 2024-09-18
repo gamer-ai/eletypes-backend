@@ -7,8 +7,12 @@ use crate::structs::claims::Claims;
 use crate::structs::leaderboard::ScoreUpdateRequest;
 use crate::structs::recaptcha_response::RecaptchaResponse;
 use actix_web::cookie::time::Duration;
-use actix_web::{cookie::Cookie, HttpResponse};
+use actix_web::{
+    cookie::{Cookie, SameSite},
+    HttpResponse,
+};
 use chrono::Utc;
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use mongodb::bson::{doc, from_bson, to_bson, to_document, Bson, Document};
 use mongodb::error::Error;
@@ -16,6 +20,16 @@ use mongodb::Collection;
 use reqwest::Error as ReqwestError;
 use std::collections::HashMap;
 use std::env;
+
+pub fn verify_jwt(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
+    // Fetch the secret key from environment variables
+    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    let decoding_key = DecodingKey::from_secret(secret.as_ref());
+
+    // Decode the JWT and extract claims
+    decode::<Claims>(token, &decoding_key, &Validation::new(Algorithm::HS256))
+        .map(|data| data.claims) // Extract claims from the decoded token
+}
 
 pub async fn process_user_registration(
     collection: &Collection<Document>,
@@ -52,11 +66,14 @@ pub async fn verify_recaptcha_and_check(token: &str) -> Result<(), HttpResponse>
 }
 
 pub fn create_http_only_cookie(token: String) -> Cookie<'static> {
+    let max_age = Duration::days(7);
+
     Cookie::build("user_jwt_token", token)
         .http_only(true)
         .secure(true)
+        .same_site(SameSite::Strict)
         .path("/")
-        .max_age(Duration::new(3600, 0))
+        .max_age(max_age)
         .finish()
 }
 
@@ -72,20 +89,31 @@ pub async fn authenticate_user(
     }
 }
 
-pub fn generate_jwt(username: &str) -> Result<String, jsonwebtoken::errors::Error> {
-    let secret_key = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+// Helper function to fetch the JWT secret from the environment
+fn get_jwt_secret() -> Result<String, env::VarError> {
+    env::var("JWT_SECRET")
+}
 
-    let expiration_time = (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp() as usize;
+// Helper function to get the expiration timestamp
+fn get_expiration_time(days: i64) -> usize {
+    (chrono::Utc::now() + chrono::Duration::days(days)).timestamp() as usize
+}
+
+pub fn generate_jwt(username: &str) -> Result<String, jsonwebtoken::errors::Error> {
+    // Fetch the secret key
+    let secret_key = get_jwt_secret().expect("JWT_SECRET must be set");
+
+    // Create claims with expiration
     let claims = Claims {
-        sub: username.to_string(),
-        exp: expiration_time,
+        sub: username.to_owned(),
+        exp: get_expiration_time(7),
     };
 
+    // Create the encoding key
     let encoding_key = EncodingKey::from_secret(secret_key.as_bytes());
 
-    let token = encode(&Header::default(), &claims, &encoding_key)?;
-
-    Ok(token)
+    // Encode the token
+    encode(&Header::default(), &claims, &encoding_key)
 }
 
 pub fn validate_credentials(
@@ -200,24 +228,16 @@ pub async fn save_user_scores(
     user: &User,
 ) -> HttpResponse {
     match update_user_in_db(collection, username, user).await {
-        Ok(result) if result.matched_count > 0 => create_success_response(username, user),
+        Ok(result) if result.matched_count > 0 => create_success_response(username),
         Ok(_) => create_not_found_update_response(username),
         Err(_) => create_internal_server_error_update_response(username),
     }
 }
 
-fn create_success_response(username: &str, user: &User) -> HttpResponse {
-    let high_scores_len = match &user.high_scores {
-        Some(scores) => scores.languages.len(),
-        None => 0,
-    };
-
+fn create_success_response(username: &str) -> HttpResponse {
     HttpResponse::Ok().json(ApiResponse {
         status: "success".to_string(),
-        message: format!(
-            "Scores updated successfully for user '{}'. Timer duration: {} entries",
-            username, high_scores_len
-        ),
+        message: format!("Scores updated successfully for user '{}'.", username),
     })
 }
 
